@@ -1,0 +1,10 @@
+[project]
+name = "img-videos-conv"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.143.0",
+    "imageio-ffmpeg",
+    "pillow",
+    "vtracer",
+]

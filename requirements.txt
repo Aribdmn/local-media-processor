@@ -1,0 +1,5 @@
+# Local Media Processor - Python dependencies (PRD Phase 1)
+fastapi[standard]>=0.143.0   # FastAPI + Uvicorn + Jinja2 + python-multipart
+pillow>=12.0.0               # raster image engine (PNG/JPG/WEBP/BMP/ICO)
+vtracer>=0.6.15              # bitmap -> SVG vector tracing engine
+imageio-ffmpeg>=0.6.0        # bundled FFmpeg fallback when none is on PATH

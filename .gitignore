@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Temp processing (auto-managed by the app)
+temp_processing/*
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.agents/
+
+instructions.md
+PRD.md

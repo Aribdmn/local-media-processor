@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local Media Processor</title>
+  <link rel="stylesheet" href="/static/css/tailwind.min.css" />
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .drop-zone { border: 2px dashed #4b5563; transition: border-color 0.15s ease, background-color 0.15s ease; }
+    .drop-zone.drag-over { border-color: #818cf8; background-color: rgba(99, 102, 241, 0.10); }
+    .progress-fill { transition: width 0.3s ease; }
+    .progress-fill.is-indeterminate {
+      position: absolute; top: 0; left: 0; width: 35%;
+      animation: progress-slide 1.1s ease-in-out infinite;
+    }
+    @keyframes progress-slide { 0% { left: -35%; } 100% { left: 100%; } }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-900 text-gray-100">
+  <header class="max-w-5xl mx-auto px-4 pt-8 pb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">Local Media Processor</h1>
+        <p class="text-sm text-gray-400 mt-1">Offline image &amp; video toolbox &mdash; everything runs on 127.0.0.1, nothing ever leaves this machine.</p>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="px-3 py-1 rounded-full text-xs font-semibold bg-green-600 text-white">&#9679; Loopback only</span>
+        <span id="engineBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-700 text-gray-300">Checking engines&hellip;</span>
+      </div>
+    </div>
+    <div id="healthWarning" class="hidden mt-4 rounded-lg border border-yellow-700 bg-yellow-900 px-4 py-3 text-sm text-yellow-200"></div>
+  </header>
+
+  <nav class="max-w-5xl mx-auto px-4 flex space-x-1 border-b border-gray-700">
+    <button id="tabImageButton" type="button" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px border-indigo-400 text-white">Image Converter</button>
+    <button id="tabVideoButton" type="button" class="px-4 py-2 text-sm font-medium border-b-2 -mb-px border-transparent text-gray-400 hover:text-gray-200">Video Processor</button>
+  </nav>
+
+  <main class="max-w-5xl mx-auto px-4 py-6 space-y-6">
+    <!-- ============================= IMAGE PANEL ============================= -->
+    <section id="imagePanel" class="rounded-xl border border-gray-700 bg-gray-800 p-5 space-y-5">
+      <div id="imageDropZone" class="drop-zone rounded-lg bg-gray-900 px-4 py-8 text-center cursor-pointer">
+        <p class="text-sm font-medium text-gray-200">Drag &amp; drop images here</p>
+        <p class="mt-1 text-xs text-gray-500">or click to browse &mdash; select one or many (PNG, JPG, WEBP, BMP, GIF, TIFF)</p>
+        <input id="imageFileInput" type="file" accept="image/*" multiple class="hidden" />
+      </div>
+
+      <!-- Review card: replaces the drop zone once images are selected (single or bulk) -->
+      <div id="imageSelectionCard" class="hidden rounded-lg border border-indigo-500 bg-gray-900 px-4 py-4">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex min-w-0 items-center space-x-4">
+            <img id="imagePreviewThumbnail" alt="Selected image preview" class="hidden h-16 w-16 rounded-lg border border-gray-600 object-cover" />
+            <div class="min-w-0">
+              <p id="imageSelectionTitle" class="truncate text-sm font-semibold text-white"></p>
+              <p id="imageSelectionSubtitle" class="mt-0.5 text-xs text-gray-400"></p>
+            </div>
+          </div>
+          <button id="imageChangeButton" type="button" class="whitespace-nowrap rounded-lg border border-gray-600 px-3 py-1.5 text-xs font-medium text-gray-300 hover:border-gray-400 hover:text-white">Change images</button>
+        </div>
+        <ul id="imageFileNameList" class="hidden mt-3 max-h-40 space-y-1 overflow-y-auto border-t border-gray-700 pt-3"></ul>
+      </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label for="imageOperation" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Operation</label>
+          <select id="imageOperation" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400">
+            <option value="convert">Convert format (PNG / JPG / WEBP / BMP)</option>
+            <option value="ico">Generate .ico favicon (16&ndash;256px layers)</option>
+            <option value="svg">Trace bitmap to .svg (vtracer)</option>
+          </select>
+        </div>
+        <div id="imageFormatGroup">
+          <label for="imageTargetFormat" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Target format</label>
+          <select id="imageTargetFormat" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400">
+            <option value="png">PNG (lossless)</option>
+            <option value="jpg">JPG / JPEG</option>
+            <option value="webp">WEBP (small size)</option>
+            <option value="bmp">BMP (uncompressed)</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="imageResizeGroup" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label for="imageMaxWidth" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Max width (px)</label>
+          <input id="imageMaxWidth" type="number" min="1" max="20000" placeholder="e.g. 1920" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-400" />
+        </div>
+        <div>
+          <label for="imageMaxHeight" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Max height (px)</label>
+          <input id="imageMaxHeight" type="number" min="1" max="20000" placeholder="e.g. 1080" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-400" />
+        </div>
+        <div>
+          <label for="imageQuality" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Quality: <span id="imageQualityValue" class="text-indigo-300">90</span></label>
+          <input id="imageQuality" type="range" min="1" max="100" value="90" class="w-full mt-2" />
+          <p class="text-xs text-gray-500 mt-1">Applies to JPG / WEBP</p>
+        </div>
+      </div>
+
+      <label class="flex items-center space-x-2 text-sm text-gray-300 cursor-pointer">
+        <input id="imageStripMetadata" type="checkbox" checked class="rounded border-gray-600 bg-gray-900 text-indigo-500 focus:ring-indigo-400" />
+        <span>Strip EXIF metadata (device, GPS, camera settings)</span>
+      </label>
+
+      <div class="flex items-center space-x-4">
+        <button id="imageConvertButton" type="button" disabled class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40">Convert image</button>
+        <span id="imageProgressText" class="hidden text-xs text-gray-400"></span>
+      </div>
+      <div id="imageProgressTrack" class="relative hidden h-2 overflow-hidden rounded-full bg-gray-700">
+        <div id="imageProgressFill" class="progress-fill h-full rounded-full bg-indigo-500" style="width: 0%"></div>
+      </div>
+      <p id="imageError" class="hidden rounded-lg border border-red-700 bg-red-900 px-3 py-2 text-sm text-red-200"></p>
+
+      <div id="imageResult" class="hidden rounded-lg border border-green-700 bg-green-900 px-4 py-3">
+        <div class="mb-3 flex items-center justify-between">
+          <p id="imageResultSummary" class="text-sm font-medium text-green-100"></p>
+          <button id="imageDownloadAllButton" type="button" class="hidden rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500">Download all</button>
+        </div>
+        <ul id="imageResultList" class="max-h-72 space-y-2 overflow-y-auto"></ul>
+      </div>
+    </section>
+
+    <!-- ============================= VIDEO PANEL ============================= -->
+    <section id="videoPanel" class="hidden rounded-xl border border-gray-700 bg-gray-800 p-5 space-y-5">
+      <div id="videoDropZone" class="drop-zone rounded-lg bg-gray-900 px-4 py-8 text-center cursor-pointer">
+        <p class="text-sm font-medium text-gray-200">Drag &amp; drop a video here</p>
+        <p class="mt-1 text-xs text-gray-500">or click to browse &mdash; MP4, MOV, MKV, AVI, WEBM</p>
+        <p id="videoFileMeta" class="mt-2 text-xs font-medium text-indigo-300"></p>
+        <input id="videoFileInput" type="file" accept="video/*" class="hidden" />
+      </div>
+
+      <div>
+        <label for="videoOperation" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Operation</label>
+        <select id="videoOperation" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400">
+          <option value="convert">Convert to MP4 (MOV / MKV / AVI / WEBM &rarr; MP4)</option>
+          <option value="compress">Compress file size (CRF presets)</option>
+          <option value="gif">Video &rarr; animated GIF</option>
+          <option value="extract_audio">Extract audio &rarr; MP3</option>
+          <option value="trim">Trim clip (lossless cut)</option>
+          <option value="strip_audio">Strip audio (mute video)</option>
+        </select>
+      </div>
+
+      <div id="videoCompressGroup" class="hidden">
+        <label for="videoCrfPreset" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Compression preset</label>
+        <select id="videoCrfPreset" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400">
+          <option value="light">Light &mdash; CRF 23 (best quality)</option>
+          <option value="balanced" selected>Balanced &mdash; CRF 28 (recommended)</option>
+          <option value="aggressive">Aggressive &mdash; CRF 32 (smallest file)</option>
+        </select>
+      </div>
+
+      <div id="videoGifGroup" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label for="gifFps" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">GIF frame rate</label>
+          <input id="gifFps" type="number" min="1" max="50" value="15" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400" />
+        </div>
+        <div>
+          <label for="gifWidth" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Max width (px)</label>
+          <input id="gifWidth" type="number" min="64" max="1920" value="480" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400" />
+        </div>
+      </div>
+
+      <div id="videoTrimGroup" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label for="trimStart" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Start time (HH:MM:SS)</label>
+          <input id="trimStart" type="text" value="00:00:00" placeholder="00:00:00" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-400" />
+        </div>
+        <div>
+          <label for="trimEnd" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">End time (HH:MM:SS)</label>
+          <input id="trimEnd" type="text" placeholder="00:00:10" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-400" />
+        </div>
+      </div>
+
+      <label class="flex items-center space-x-2 text-sm text-gray-300 cursor-pointer">
+        <input id="videoStripMetadata" type="checkbox" checked class="rounded border-gray-600 bg-gray-900 text-indigo-500 focus:ring-indigo-400" />
+        <span>Strip metadata (GPS / device tags) before saving</span>
+      </label>
+
+      <div class="flex items-center space-x-4">
+        <button id="videoProcessButton" type="button" disabled class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40">Process video</button>
+        <span id="videoProgressText" class="hidden text-xs text-gray-400"></span>
+      </div>
+      <div id="videoProgressTrack" class="relative hidden h-2 overflow-hidden rounded-full bg-gray-700">
+        <div id="videoProgressFill" class="progress-fill h-full rounded-full bg-indigo-500" style="width: 0%"></div>
+      </div>
+      <p id="videoError" class="hidden rounded-lg border border-red-700 bg-red-900 px-3 py-2 text-sm text-red-200"></p>
+
+      <div id="videoResult" class="hidden items-center justify-between rounded-lg border border-green-700 bg-green-900 px-4 py-3">
+        <div>
+          <p id="videoResultName" class="text-sm font-medium text-green-100"></p>
+          <p id="videoResultSizes" class="mt-0.5 text-xs text-green-300"></p>
+        </div>
+        <a id="videoDownloadLink" href="#" class="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500">Download</a>
+      </div>
+    </section>
+
+    <p class="text-center text-xs text-gray-600">Tip: files are cleaned from <code>temp_processing/</code> automatically right after you download them.</p>
+  </main>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
+
+
