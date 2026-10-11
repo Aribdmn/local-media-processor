@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindOperationSelectors();
   bindActionButtons();
   bindQualitySlider();
+  bindResizeControls();
   refreshEngineStatus();
 });
 
@@ -319,6 +320,31 @@ function bindQualitySlider() {
   });
 }
 
+function bindResizeControls() {
+  document.getElementById("imageResizeMode").addEventListener("change", updateResizeControlVisibility);
+  document.getElementById("imageScalePercent").addEventListener("input", () => {
+    const percentInput = document.getElementById("imageScalePercent");
+    document.getElementById("imageScalePercentValue").textContent = percentInput.value;
+  });
+  document.getElementById("imageKeepAspectRatio").addEventListener("change", updateExactSizeWarning);
+}
+
+function updateResizeControlVisibility() {
+  // Only the controls belonging to the selected resize mode stay visible.
+  const resizeMode = document.getElementById("imageResizeMode").value;
+  document.getElementById("imageDimensionsControls").classList.toggle("hidden", resizeMode !== "dimensions");
+  document.getElementById("imagePercentageControl").classList.toggle("hidden", resizeMode !== "percentage");
+  updateExactSizeWarning();
+}
+
+function updateExactSizeWarning() {
+  // Stretching to an exact size needs both dimensions - warn as soon as the ratio is off.
+  const resizeMode = document.getElementById("imageResizeMode").value;
+  const keepRatio = document.getElementById("imageKeepAspectRatio").checked;
+  const shouldWarn = resizeMode === "dimensions" && !keepRatio;
+  document.getElementById("imageExactSizeWarning").classList.toggle("hidden", !shouldWarn);
+}
+
 // ---------------------------------------------------------------------------
 // Generic UI helpers
 // ---------------------------------------------------------------------------
@@ -434,6 +460,11 @@ async function submitImageConversion() {
 
   const selectedOperation = document.getElementById("imageOperation").value;
   const conversionOptions = readImageConversionOptions();
+  const resizeValidationError = validateResizeOptions(conversionOptions);
+  if (resizeValidationError) {
+    showAlert("image", resizeValidationError);
+    return;
+  }
 
   clearAlert("image");
   hideResultPanel("image");
@@ -477,8 +508,11 @@ function readImageConversionOptions() {
   return {
     targetFormat: document.getElementById("imageTargetFormat").value,
     quality: document.getElementById("imageQuality").value,
+    resizeMode: document.getElementById("imageResizeMode").value,
     maxWidth: document.getElementById("imageMaxWidth").value,
     maxHeight: document.getElementById("imageMaxHeight").value,
+    keepAspectRatio: document.getElementById("imageKeepAspectRatio").checked,
+    scalePercent: document.getElementById("imageScalePercent").value,
     stripMetadata: document.getElementById("imageStripMetadata").checked ? "true" : "false",
   };
 }
@@ -491,10 +525,31 @@ function createImageConversionFormData(imageFile, selectedOperation, conversionO
   if (selectedOperation === "convert") {
     formData.append("target_format", conversionOptions.targetFormat);
     formData.append("quality", conversionOptions.quality);
-    appendNonEmptyValue(formData, "max_width", conversionOptions.maxWidth);
-    appendNonEmptyValue(formData, "max_height", conversionOptions.maxHeight);
+    formData.append("resize_mode", conversionOptions.resizeMode);
+    formData.append("keep_aspect_ratio", conversionOptions.keepAspectRatio ? "true" : "false");
+    formData.append("scale_percent", conversionOptions.scalePercent);
+    if (conversionOptions.resizeMode === "dimensions") {
+      appendNonEmptyValue(formData, "max_width", conversionOptions.maxWidth);
+      appendNonEmptyValue(formData, "max_height", conversionOptions.maxHeight);
+    }
   }
   return formData;
+}
+
+function validateResizeOptions(conversionOptions) {
+  // Returns an error message string, or null when the resize settings are usable.
+  if (conversionOptions.resizeMode !== "dimensions") {
+    return null;
+  }
+  const hasWidth = conversionOptions.maxWidth !== "";
+  const hasHeight = conversionOptions.maxHeight !== "";
+  if (!conversionOptions.keepAspectRatio && (!hasWidth || !hasHeight)) {
+    return "Exact-size resize (aspect ratio off) needs both a width and a height.";
+  }
+  if (conversionOptions.keepAspectRatio && !hasWidth && !hasHeight) {
+    return "Enter a max width, a max height, or both.";
+  }
+  return null;
 }
 
 function renderImageResults(conversionResults) {

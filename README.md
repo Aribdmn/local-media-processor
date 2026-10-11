@@ -32,7 +32,7 @@ Convert images (one or many at a time), generate favicons, trace bitmaps to SVG,
 
 | Tool | Description | Options |
 |:--|:--|:--|
-| **Format conversion** | PNG ⇄ JPG ⇄ WEBP ⇄ BMP | Max width/height (aspect-preserving, shrink-only), quality 1–100 |
+| **Format conversion** | PNG ⇄ JPG ⇄ WEBP ⇄ BMP | Resize modes: none · max dimensions (ratio on/off) · percentage scale; quality 1–100 |
 | **ICO favicon generator** | One image → multi-resolution `.ico` | Layers: 16, 32, 48, 64, 128, 256 px |
 | **Bitmap → SVG tracing** | Vector-trace PNG/JPG logos via the vtracer engine | — |
 | **EXIF stripping** | Remove device, GPS, and camera metadata | On by default; toggleable per conversion |
@@ -157,7 +157,10 @@ You should see a green **"FFmpeg ready"** badge in the top-right corner. That is
    - **Bulk** → "N images selected", the total size, and a list of file names (capped at 50, then "+N more")
    - **Change images** returns to the drop zone at any time
 4. Pick an operation — the same settings apply to every image:
-   - **Convert format** — choose the target format; optionally set max width/height and quality (quality applies to JPG/WEBP).
+   - **Convert format** — choose the target format, quality (JPG/WEBP), and a resize mode:
+     - *No resize* — keep the original size
+     - *By max dimensions* — fit inside a width/height box with **"Keep original aspect ratio"** on (never upscales); or stretch to an exact size with it off (both values required)
+     - *By percentage* — scale uniformly (50% = half, 200% = double); always keeps the ratio
    - **Generate .ico favicon** — produces a multi-layer favicon from each image.
    - **Trace bitmap to .svg** — turns each raster logo into a scalable vector.
 5. Leave **"Strip EXIF metadata"** checked unless you want to keep camera/GPS data.
@@ -200,7 +203,10 @@ Base URL: `http://127.0.0.1:8000`
 | `file` | File | *required* | PNG, JPG, WEBP, BMP, GIF, TIFF |
 | `operation` | String | `convert` | `convert` \| `ico` \| `svg` |
 | `target_format` | String | `png` | `png` \| `jpg` \| `webp` \| `bmp` (convert only) |
-| `max_width` / `max_height` | Int 1–20000 | — | Optional; shrink-only, aspect preserved |
+| `resize_mode` | String | `none` | `none` \| `dimensions` \| `percentage` |
+| `max_width` / `max_height` | Int 1–20000 | — | `dimensions` mode; box fit when ratio on, exact stretch when off |
+| `keep_aspect_ratio` | Bool | `true` | `dimensions` mode; off = exact size (both values required) |
+| `scale_percent` | Int 1–500 | `100` | `percentage` mode; uniform scale, upscaling allowed |
 | `quality` | Int 1–100 | `90` | JPG / WEBP only |
 | `strip_metadata` | Bool | `true` | EXIF removal toggle |
 
@@ -233,9 +239,10 @@ Base URL: `http://127.0.0.1:8000`
 ### Example session (curl)
 
 ```bash
-# 1. Convert an image to WEBP at 60% quality
+# 1. Convert an image to WEBP at 60% quality, scaled to 50%
 curl -F "file=@logo.png" -F "operation=convert" \
      -F "target_format=webp" -F "quality=60" \
+     -F "resize_mode=percentage" -F "scale_percent=50" \
      http://127.0.0.1:8000/api/convert-image
 
 # 2. Compress a video with the balanced preset
@@ -297,6 +304,8 @@ All tuning lives in the constants at the top of [`main.py`](main.py):
 | **"Unknown job id" / 404 while polling** | The server was restarted; job registries are in-memory by design. Re-submit the file |
 | **Trim starts a moment later than requested** | Lossless trim (`-c copy`) snaps to the nearest keyframe — this is a trade-off for zero re-encoding. Use *Convert* on the trimmed range if frame-exact matters |
 | **Transparent PNG → JPG looks white** | Expected: JPEG has no alpha channel, so transparency is composited onto a white background |
+| **Image looks stretched after resizing** | Expected with **"Keep original aspect ratio"** off — it resizes to the exact width × height. Turn the ratio back on for a distortion-free fit |
+| **Percentage above 100% looks soft** | Upscaling cannot add real detail — it only interpolates existing pixels |
 | **`.ico` missing the 256px layer** | Layers larger than the source image are skipped (standard ICO behavior) — feed a ≥256px source |
 | **Compressed file is bigger than the original** | Already-efficient sources (or synthetic patterns) can grow at low CRF — try the *aggressive* preset or a GIF/resize instead |
 | **Browser asks to "allow multiple downloads"** | Expected when using **Download all** — allow it once, or use the per-file Download buttons instead |

@@ -42,6 +42,7 @@ IMAGE_OUTPUT_EXTENSIONS = {
     "bmp": ".bmp", "ico": ".ico", "svg": ".svg",
 }
 ICO_LAYER_SIZES = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]  # FR-IMG-02
+RESIZE_MODES = {"none", "dimensions", "percentage"}  # FR-IMG-04 resize options
 CRF_PRESETS = {"light": 23, "balanced": 28, "aggressive": 32}                      # FR-VID-03
 IMAGE_OPERATIONS = {"convert", "ico", "svg"}
 VIDEO_OPERATIONS = {"convert", "compress", "gif", "extract_audio", "trim", "strip_audio"}
@@ -218,20 +219,40 @@ def convert_raster_image_format(
     input_path: Path,
     output_path: Path,
     target_format: str,
+    resize_mode: str,
     max_width: int | None,
     max_height: int | None,
+    keep_aspect_ratio: bool,
+    scale_percent: int,
     quality: int,
     strip_metadata: bool,
 ) -> None:
-    """FR-IMG-01/04: bidirectional raster conversion with optional resize and quality control."""
+    """FR-IMG-01/04: raster conversion with none / max-dimensions / percentage resize modes."""
     pillow_format = RASTER_FORMATS[target_format]
     with Image.open(input_path) as source_image:
         original_exif = source_image.info.get("exif")
         # Baking the orientation in before EXIF removal keeps the visual result correct.
         working_image = ImageOps.exif_transpose(source_image) if strip_metadata else source_image
 
-        if max_width is not None or max_height is not None:
-            # thumbnail() only shrinks, so the values behave as "maximum dimensions".
+        if resize_mode == "percentage":
+            # A single scale factor always preserves the aspect ratio; upscaling is allowed.
+            scale_factor = scale_percent / 100
+            target_size = (
+                max(1, round(working_image.width * scale_factor)),
+                max(1, round(working_image.height * scale_factor)),
+            )
+            working_image = working_image.resize(target_size, Image.Resampling.LANCZOS)
+        elif resize_mode == "dimensions" and keep_aspect_ratio:
+            # thumbnail() only shrinks, so the values behave as "maximum dimensions" (ratio kept).
+            if max_width is not None or max_height is not None:
+                limit_width = max_width or working_image.width
+                limit_height = max_height or working_image.height
+                working_image.thumbnail((limit_width, limit_height), Image.Resampling.LANCZOS)
+        elif resize_mode == "dimensions":
+            # Exact stretch to the requested size (the endpoint validates both values exist).
+            working_image = working_image.resize((max_width, max_height), Image.Resampling.LANCZOS)
+        elif max_width is not None or max_height is not None:
+            # Legacy path for API callers that send bare max_width/max_height without a mode.
             limit_width = max_width or working_image.width
             limit_height = max_height or working_image.height
             working_image.thumbnail((limit_width, limit_height), Image.Resampling.LANCZOS)
@@ -581,8 +602,11 @@ async def convert_uploaded_image(
     file: Annotated[UploadFile, File(description="Source image (PNG/JPG/WEBP/BMP/...)")],
     operation: Annotated[str, Form(description="convert | ico | svg")] = "convert",
     target_format: Annotated[str, Form(description="png | jpg | webp | bmp")] = "png",
+    resize_mode: Annotated[str, Form(description="none | dimensions | percentage")] = "none",
     max_width: Annotated[int | None, Form(ge=1, le=20000)] = None,
     max_height: Annotated[int | None, Form(ge=1, le=20000)] = None,
+    keep_aspect_ratio: Annotated[bool, Form(description="Preserve the original ratio in dimensions mode")] = True,
+    scale_percent: Annotated[int, Form(ge=1, le=500)] = 100,
     quality: Annotated[int, Form(ge=1, le=100)] = 90,
     strip_metadata: Annotated[bool, Form(description="Remove EXIF/device metadata")] = True,
 ) -> dict:
@@ -595,6 +619,17 @@ async def convert_uploaded_image(
         )
     if operation == "convert" and target_format not in RASTER_FORMATS:
         raise HTTPException(status_code=400, detail=f"Unsupported target format '{target_format}'.")
+    if resize_mode not in RESIZE_MODES:
+        raise HTTPException(status_code=400, detail=f"Unsupported resize mode '{resize_mode}'.")
+    if (
+        resize_mode == "dimensions"
+        and not keep_aspect_ratio
+        and (max_width is None or max_height is None)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Exact-size resize (aspect ratio off) requires both max width and max height.",
+        )
 
     file_id, input_path, original_stem = await store_uploaded_file(file, IMAGE_EXTENSIONS, "image")
     output_extension = IMAGE_OUTPUT_EXTENSIONS[target_format if operation == "convert" else operation]
@@ -605,7 +640,8 @@ async def convert_uploaded_image(
             await run_in_threadpool(
                 convert_raster_image_format,
                 input_path, output_path, target_format,
-                max_width, max_height, quality, strip_metadata,
+                resize_mode, max_width, max_height, keep_aspect_ratio, scale_percent,
+                quality, strip_metadata,
             )
         elif operation == "ico":
             await run_in_threadpool(generate_multiresolution_icon, input_path, output_path)

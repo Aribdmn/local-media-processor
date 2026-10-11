@@ -82,20 +82,42 @@
         </div>
       </div>
 
-      <div id="imageResizeGroup" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label for="imageMaxWidth" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Max width (px)</label>
-          <input id="imageMaxWidth" type="number" min="1" max="20000" placeholder="e.g. 1920" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-400" />
+      <div id="imageResizeGroup" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label for="imageResizeMode" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Resize</label>
+            <select id="imageResizeMode" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400">
+              <option value="none">No resize (original size)</option>
+              <option value="dimensions">By max dimensions (px)</option>
+              <option value="percentage">By percentage</option>
+            </select>
+          </div>
+          <div id="imagePercentageControl" class="hidden">
+            <label for="imageScalePercent" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Scale: <span id="imageScalePercentValue" class="text-indigo-300">100</span>%</label>
+            <input id="imageScalePercent" type="range" min="1" max="500" value="100" class="w-full mt-2" />
+            <p class="text-xs text-gray-500 mt-1">100% = original; always keeps the aspect ratio</p>
+          </div>
+          <div>
+            <label for="imageQuality" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Quality: <span id="imageQualityValue" class="text-indigo-300">90</span></label>
+            <input id="imageQuality" type="range" min="1" max="100" value="90" class="w-full mt-2" />
+            <p class="text-xs text-gray-500 mt-1">Applies to JPG / WEBP</p>
+          </div>
         </div>
-        <div>
-          <label for="imageMaxHeight" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Max height (px)</label>
-          <input id="imageMaxHeight" type="number" min="1" max="20000" placeholder="e.g. 1080" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-400" />
+        <div id="imageDimensionsControls" class="hidden grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label for="imageMaxWidth" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Max width (px)</label>
+            <input id="imageMaxWidth" type="number" min="1" max="20000" placeholder="e.g. 1920" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-400" />
+          </div>
+          <div>
+            <label for="imageMaxHeight" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Max height (px)</label>
+            <input id="imageMaxHeight" type="number" min="1" max="20000" placeholder="e.g. 1080" class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-400" />
+          </div>
+          <label class="flex items-center space-x-2 text-sm text-gray-300 cursor-pointer">
+            <input id="imageKeepAspectRatio" type="checkbox" checked class="rounded border-gray-600 bg-gray-900 text-indigo-500 focus:ring-indigo-400" />
+            <span>Keep original aspect ratio</span>
+          </label>
         </div>
-        <div>
-          <label for="imageQuality" class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Quality: <span id="imageQualityValue" class="text-indigo-300">90</span></label>
-          <input id="imageQuality" type="range" min="1" max="100" value="90" class="w-full mt-2" />
-          <p class="text-xs text-gray-500 mt-1">Applies to JPG / WEBP</p>
-        </div>
+        <p id="imageExactSizeWarning" class="hidden text-xs text-yellow-400">Aspect ratio off: both width and height are required, and the image may stretch to fit.</p>
       </div>
 
       <label class="flex items-center space-x-2 text-sm text-gray-300 cursor-pointer">
